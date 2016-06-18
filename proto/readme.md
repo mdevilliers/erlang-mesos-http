@@ -6,9 +6,9 @@
 
 ```
 import "mesos/v1/mesos.proto";
-``` 
+```
 
-to 
+to
 
 ```
 import "mesos.proto";

@@ -1,16 +1,16 @@
 .DEFAULT_GOAL := help
 
-test:
+test: ## run tests
 	./rebar skip_deps=true eunit
 
-bootstrap: # set up environment
+bootstrap: ## set up environment
 	./rebar get-deps
 
 .PHONY: test bootstrap
 
-test-environment: zookeeper mesos-master mesos-slave # install integration environment
+test-environment: zookeeper mesos-master mesos-slave ## install integration environment
 
-test-environment-down: # remove integration environment
+test-environment-down: ## remove integration environment
 	docker rm -f zookeeper mesos-master mesos-slave
 
 zookeeper:
@@ -48,7 +48,7 @@ mesos-slave:
 	-v /usr/lib/x86_64-linux-gnu/libapparmor.so.1:/usr/lib/x86_64-linux-gnu/libapparmor.so.1 \
 	-v /usr/lib/x86_64-linux-gnu/libltdl.so.7:/usr/lib/x86_64-linux-gnu/libltdl.so.7 \
 	-it --entrypoint mesos-slave \
-	mesosphere/mesos:0.28.1 --ip=127.0.0.1 --hostname=127.0.0.1 
+	mesosphere/mesos:0.28.1 --ip=127.0.0.1 --hostname=127.0.0.1
 
 .PHONY: test-environment test-environment-down mesos-master mesos-slave zookeeper
 
