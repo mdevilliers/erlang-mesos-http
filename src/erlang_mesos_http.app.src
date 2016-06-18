@@ -1,0 +1,6 @@
+{ application, erlang_mesos_http,
+    [{description, ""},
+    {vsn, "0.28.0"},
+    {registered, []},
+    {applications, [kernel,stdlib]} ]
+}.
