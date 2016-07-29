@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := help
 
+PROTO_FILES := $(shell find ./proto -name '*.proto')
+
 test: ## run tests
 	./rebar skip_deps=true eunit
 
@@ -44,7 +46,19 @@ mesos-slave:
 	-v /usr/local/bin/docker:/usr/local/bin/docker \
 	mesosphere/mesos-slave:1.0.0
 
-.PHONY: test-environment test-environment-down mesos-master mesos-slave zookeeper
+generate-proto-bindings: clean-bindings ## generate the erlang bindings fromthe proto files
+	deps/gpb/bin/protoc-erl -I$(PWD)/proto -pkgs -o-erl src -o-hrl include -modsuffix _pb -il $(wildcard $(PWD)/proto/*.proto)
+
+clean-bindings: clean-proto-bindings clean-proto-includes 
+
+clean-proto-bindings:
+	rm -f src/*_pb.erl
+
+clean-bindingsn-proto-includes:
+	rm -f include/*_pb.hrl
+	
+
+.PHONY: generate-proto-bindings test-environment test-environment-down mesos-master mesos-slave zookeeper
 
 # 'help' parses the Makefile and displays the help text
 help:
