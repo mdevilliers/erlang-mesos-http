@@ -1,7 +1,5 @@
 .DEFAULT_GOAL := help
 
-PROTO_FILES := $(shell find ./proto -name '*.proto')
-
 test: ## run tests
 	./rebar skip_deps=true eunit
 
