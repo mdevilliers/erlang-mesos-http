@@ -182,7 +182,10 @@ kill(Scheduler, TaskId) when is_pid(Scheduler), is_record(TaskId, 'mesos.v1.Task
 
 -spec kill (Scheduler :: scheduler_client(),
             TaskId :: #'mesos.v1.TaskID'{},
-            AgentId :: #'mesos.v1.AgentID'{} ) -> ok.
+            AgentId :: #'mesos.v1.AgentID'{} ) -> ok
+        ;  (Scheduler :: scheduler_client(),
+            TaskId :: #'mesos.v1.TaskID'{},
+            KillPolicy :: #'mesos.v1.KillPolicy'{}) -> ok.
 
 kill(Scheduler, TaskId, AgentId) when is_pid(Scheduler),
                                       is_record(TaskId, 'mesos.v1.TaskID'),
@@ -191,18 +194,14 @@ kill(Scheduler, TaskId, AgentId) when is_pid(Scheduler),
     gen_server:cast(Scheduler, {kill, #'mesos.v1.scheduler.Call.Kill'{
             task_id = TaskId,
             agent_id = AgentId
-        }}).
-
--spec kill (Scheduler :: scheduler_client(),
-            TaskId :: #'mesos.v1.TaskID'{},
-            KillPolicy :: #'mesos.v1.KillPolicy'{}) -> ok.
+        }});
 
 kill(Scheduler, TaskId, KillPolicy) when is_pid(Scheduler), 
                                          is_record(TaskId, 'mesos.v1.TaskID'),
                                          is_record(KillPolicy, 'mesos.v1.KillPolicy')->
 
     gen_server:cast(Scheduler, {kill, #'mesos.v1.scheduler.Call.Kill'{
-            task_id = TaskIdi,
+            task_id = TaskId,
             kill_policy = KillPolicy
     }}).
 
