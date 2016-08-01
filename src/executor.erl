@@ -38,11 +38,14 @@
 
 % callback specifications
 -type executor_client() :: pid().
+-type task_infos() :: ['mesos.v1.TaskInfo'].
+-type updates() :: ['mesos.v1.Update'].
 
 -callback init( Args :: any())
     -> {State :: any()}.
 
 -callback subscribed(Client :: executor_client(),
+                     FrameworkInfo :: #'mesos.v1.FrameworkInfo'{},
                      ExecutorInfo :: #'mesos.v1.ExecutorInfo'{},
                      AgentInfo ::  #'mesos.v1.AgentInfo'{},
                      State :: any())
@@ -54,6 +57,7 @@
 
 -callback kill(Client :: executor_client(),
                TaskId :: #'mesos.v1.TaskID'{},
+               KillPolicy :: #'mesos.v1.KillPolicy'{},
                State :: any()) -> {ok, State :: any()}.
 
 -callback acknowledged(Client :: executor_client(),
@@ -66,7 +70,6 @@
                   State :: any()) -> {ok, State :: any()}.
 
 -callback shutdown(Client :: executor_client(),
-                  GracePeriodInSeconds :: number(),
                   State :: any()) -> {ok, State :: any()}.
 
 -callback error( Client :: executor_client(),
@@ -88,7 +91,20 @@ start_link(Module, Args ) ->
     hackney:start(),
     gen_server:start_link(?MODULE, {Module, Args}, []).
 
--spec update(Executor :: executor_client(), 
+
+-spec subscribe(Executor :: executor_client(),
+               UnAcknowledgedTasks :: task_infos(),
+               UnAcknowledgedUpdates :: updates()
+               ) -> ok.
+
+subscribe(Executor, UnAcknowledgedTasks, UnAcknowledgedUpdates)
+                                                when is_pid(Executor) ->
+    gen_server:cast(Executor, {subscribe, #'mesos.v1.Subscribe'{
+                        TaskInfo : UnAcknowledgedTasks,
+                        Update : UnAcknowledgedUpdates
+    }}),
+
+-spec update(Executor :: executor_client(),
              TaskStatus :: #'mesos.v1.TaskStatus'{}) -> ok.
 
 update(Executor, TaskStatus) when is_pid(Executor),
@@ -189,11 +205,11 @@ dispatch_event(Event, State) -> dispatch_event(Event#'mesos.v1.executor.Event'.t
 dispatch_event('SUBSCRIBED', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
 
     #'mesos.v1.executor.Event.Subscribed'{
-        executor_info = nil,
-        framework_info = nil,
+        executor_info = ExecutorInfo,
+        framework_info = FrameworkInfo,
         agent_info = AgentInfo } = Event#'mesos.v1.executor.Event'.subscribed,
 
-    {ok, HandlerState1} = Module:subscribed(self(), AgentInfo, HandlerState),
+    {ok, HandlerState1} = Module:subscribed(self(),FrameworkInfo, ExecutorInfo, AgentInfo, HandlerState),
     State#executor_state{framework_id = nil, handler_state = HandlerState1};
 
 dispatch_event('LAUNCH', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
@@ -207,9 +223,10 @@ dispatch_event('LAUNCH', Event, #executor_state{ handler_module = Module, handle
 dispatch_event('KILL', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
 
     #'mesos.v1.executor.Event.Kill'{
-        task_id = TaskID } = Event#'mesos.v1.executor.Event'.kill,
+        task_id = TaskID,
+        kill_policy = KillPolicy } = Event#'mesos.v1.executor.Event'.kill,
 
-    {ok, HandlerState1} = Module:kill(self(), TaskID, HandlerState),
+    {ok, HandlerState1} = Module:kill(self(), TaskID, KillPolicy, HandlerState),
     State#executor_state{handler_state = HandlerState1};
 
 dispatch_event('ACKNOWLEDGED', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
@@ -231,10 +248,7 @@ dispatch_event('MESSAGE', Event, #executor_state{ handler_module = Module, handl
 
 dispatch_event('SHUTDOWN', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
 
-    #'mesos.v1.executor.Event.Shutdown'{
-        grace_period_seconds = GracePeriodInSeconds } = Event#'mesos.v1.executor.Event'.shutdown,
-
-    {ok, HandlerState1} = Module:shutdown(self(), GracePeriodInSeconds, HandlerState),
+    {ok, HandlerState1} = Module:shutdown(self(), HandlerState),
     State#executor_state{handler_state = HandlerState1};
 
 dispatch_event('ERROR', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
@@ -275,7 +289,7 @@ subscribe() -> {ok, nothing}.
 % subscribe(MasterUrl, FrameworkInfo, Force) when is_list(MasterUrl), 
 %                             is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo'), 
 %                             is_boolean(Force) ->
-    
+
 %     Message = #'mesos.v1.scheduler.Call.Subscribe'{ 
 %         framework_info = FrameworkInfo, force = Force
 %     },
