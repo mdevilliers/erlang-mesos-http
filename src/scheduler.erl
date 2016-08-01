@@ -4,8 +4,13 @@
 
 -include_lib("scheduler_pb.hrl").
 
--export([start/2, start_link/2, teardown/1, accept/3, accept/4,
-         decline/2, decline/3, revive/1, kill/2, kill/3, shutdown/3,
+-export([start/2, start_link/2, teardown/1, 
+         accept/3, accept/4,
+         accept_inverse_offers/2, accept_inverse_offers/3,
+         decline_inverse_offers/2, decline_inverse_offers/3,
+         decline/2, decline/3, revive/1, 
+         kill/2, kill/3, kill/4, 
+         shutdown/3,
          acknowledge/4, reconcile/2, message/4, request/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -36,7 +41,7 @@
 
 -callback init( Args :: any())
     -> {FrameworkInfo :: #'mesos.v1.FrameworkInfo'{}, MasterUrl :: string(),
-        ImplicitAcknowledgements :: boolean(), Force :: boolean(), State :: any()}.
+        ImplicitAcknowledgements :: boolean(), State :: any()}.
 
 -callback subscribed( Client :: scheduler_client(), State :: any())
     -> {ok, State :: any()}.
@@ -292,13 +297,12 @@ handle_call(_, _, State) ->
 handle_cast({startup, Module, Args}, _)->
 
     case Module:init(Args) of
-        { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, Force, State }
+        { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, State }
                 when is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo'),
                      is_list(MasterUrl),
-                     is_boolean(ImplicitAcknowledgements),
-                     is_boolean(Force) ->
+                     is_boolean(ImplicitAcknowledgements)->
 
-            {ok, Request} = subscribe(MasterUrl, FrameworkInfo, Force),
+            {ok, Request} = subscribe(MasterUrl, FrameworkInfo),
             State1 = #scheduler_state{
                                 master_url = MasterUrl,
                                 implicit_ackowledgments = ImplicitAcknowledgements,
@@ -339,11 +343,12 @@ handle_cast({accept, Message}, #scheduler_state{ master_url = MasterUrl,
     },StreamId),
     {noreply, State};
 
-handle_cast({accept_inverse_offers, MESSAGE}, #scheduler_state{master_url = MasterUrl, framework_id = FrameworkId, stream_id = StreamId} = State) ->
+handle_cast({accept_inverse_offers, Message}, #scheduler_state{master_url = MasterUrl, framework_id = FrameworkId, stream_id = StreamId} = State) ->
 
     ok = post(MasterUrl,#'mesos.v1.scheduler.Call'{
         framework_id = FrameworkId,
-        type = 'ACCEPT_INVERSE_OFFERS'
+        type = 'ACCEPT_INVERSE_OFFERS',
+        accept_inverse_offers = Message
     },StreamId),
     {noreply, State};
 
@@ -364,7 +369,8 @@ handle_cast({decline_inverse_offersi, Message}, #scheduler_state{master_url = Ma
 
     ok = post(MasterUrl,#'mesos.v1.scheduler.Call'{
         framework_id = FrameworkId,
-        type = 'DECLINE_INVERSE_OFFERS'
+        type = 'DECLINE_INVERSE_OFFERS',
+        decline_inverse_offers = Message
     },StreamId),
     {noreply, State};
 
@@ -437,7 +443,7 @@ handle_cast({request, Message}, #scheduler_state{master_url = MasterUrl, framewo
     }, StreamId),
     {noreply, State}.
 
-# TODO : Add suppress
+% TODO : Add support forSUPPRESS 
 
 handle_info({hackney_response, _Ref, {status, _StatusInt, _Reason}}, State) ->
     %io:format("got ~p status: ~p with reason ~p~n", [_Ref, _StatusInt, _Reason]),
@@ -478,9 +484,16 @@ dispatch_event('SUBSCRIBED', Event, #scheduler_state{ framework_id = undefined, 
 
 dispatch_event('OFFERS', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
 
-    #'mesos.v1.scheduler.Event.Offers'{ offers = Offers, inverse_offers = InverseOffers} = Event#'mesos.v1.scheduler.Event'.offers,
+    #'mesos.v1.scheduler.Event.Offers'{ offers = Offers } = Event#'mesos.v1.scheduler.Event'.offers,
 
-    {ok, HandlerState1} = offer_dispatch(Module, Offers, InverseOffers, HandlerState),
+    {ok, HandlerState1} = Module:offers(self(), Offers, HandlerState),
+    State#scheduler_state{handler_state = HandlerState1};
+
+dispatch_event('INVERSE_OFFERS', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
+
+    #'mesos.v1.scheduler.Event.InverseOffers'{ inverse_offers = Offers } = Event#'mesos.v1.scheduler.Event'.inverse_offers,
+
+    {ok, HandlerState1} = Module:inverse_offers(self(), Offers, HandlerState),
     State#scheduler_state{handler_state = HandlerState1};
 
 dispatch_event('RESCIND', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
@@ -489,6 +502,14 @@ dispatch_event('RESCIND', Event, #scheduler_state{ handler_module = Module, hand
 
     {ok, HandlerState1} = Module:rescind(self(), OfferId, HandlerState),
     State#scheduler_state{handler_state = HandlerState1};
+
+dispatch_event('RESCIND_INVERSE_OFFER', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
+
+    #'mesos.v1.scheduler.Event.RescindInverseOffer'{ inverse_offer_id = OfferId } = Event#'mesos.v1.scheduler.Event'.rescind_inverse_offer,
+
+    {ok, HandlerState1} = Module:rescind_inverse_offer(self(), OfferId, HandlerState),
+    State#scheduler_state{handler_state = HandlerState1};
+
 
 dispatch_event('UPDATE', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState, implicit_ackowledgments = ImplicitAcknowledgements } = State) ->
 
@@ -537,15 +558,15 @@ acknowledgeStatusUpdate(true, #'mesos.v1.TaskStatus'{task_id = TaskId,
 
 % only send out offers or inverse offers if they exist
 % chain one after the other if they are received together
-offer_dispatch(_, [], [], State) -> {ok, State};
-offer_dispatch(Module, Offers, [], State) ->
-    Module:offers(self(), Offers, State);
-offer_dispatch(Module, [], InverseOffers, State) ->
-    Module:inverse_offers(self(), InverseOffers, State);
-offer_dispatch(Module, Offers, InverseOffers, State) ->
-    {ok, State1} = Module:offers(self(), Offers, State),
-    {ok, State2} = Module:inverse_offers(self(), InverseOffers, State1),
-    {ok, State2}.
+%offer_dispatch(_, [], [], State) -> {ok, State};
+%offer_dispatch(Module, Offers, [], State) ->
+%    Module:offers(self(), Offers, State);
+%offer_dispatch(Module, [], InverseOffers, State) ->
+%    Module:inverse_offers(self(), InverseOffers, State);
+%offer_dispatch(Module, Offers, InverseOffers, State) ->
+%    {ok, State1} = Module:offers(self(), Offers, State),
+%    {ok, State2} = Module:inverse_offers(self(), InverseOffers, State1),
+%    {ok, State2}.
 
 post(MasterUrl, Message, StreamId) ->
 
@@ -564,12 +585,11 @@ post(MasterUrl, Message, StreamId) ->
             ok
     end.
 
-subscribe(MasterUrl, FrameworkInfo, Force) when is_list(MasterUrl),
-                            is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo'),
-                            is_boolean(Force) ->
+subscribe(MasterUrl, FrameworkInfo) when is_list(MasterUrl),
+                            is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo') ->
 
     Message = #'mesos.v1.scheduler.Call.Subscribe'{
-        framework_info = FrameworkInfo, force = Force
+        framework_info = FrameworkInfo
     },
 
     Call = #'mesos.v1.scheduler.Call'{
