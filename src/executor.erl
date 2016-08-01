@@ -4,7 +4,7 @@
 
 -include_lib("executor_pb.hrl").
 
--export([start/2, start_link/2, update/2, message/2]).
+-export([start/2, start_link/2, subscribe/3, update/2, message/2]).
 
   % message Subscribe {
   %   repeated TaskInfo unacknowledged_tasks = 1;
@@ -99,10 +99,10 @@ start_link(Module, Args ) ->
 
 subscribe(Executor, UnAcknowledgedTasks, UnAcknowledgedUpdates)
                                                 when is_pid(Executor) ->
-    gen_server:cast(Executor, {subscribe, #'mesos.v1.Subscribe'{
-                        TaskInfo : UnAcknowledgedTasks,
-                        Update : UnAcknowledgedUpdates
-    }}),
+    gen_server:cast(Executor, {subscribe, #'mesos.v1.executor.Call.Subscribe'{
+                        unacknowledged_tasks = UnAcknowledgedTasks,
+                        unacknowledged_updates = UnAcknowledgedUpdates
+    }}).
 
 -spec update(Executor :: executor_client(),
              TaskStatus :: #'mesos.v1.TaskStatus'{}) -> ok.
@@ -150,6 +150,17 @@ handle_cast({startup, Module, Args}, State)->
                 Error = {bad_return_value, Else},
                 {stop, Error, #executor_state{ handler_module = Module}}
     end;
+
+handle_cast({subscribe, Message}, State)
+        when is_record(Message, 'mesos.v1.executor.Call.Subscribe') ->
+
+    ok = post(#'mesos.v1.executor.Call'{
+        framework_id = nil,
+        subscribe = Message,
+        type = 'SUBSCRIBE'
+    }),
+    {noreply,State};
+
 
 handle_cast({message, Message}, State)
         when is_record(Message, 'mesos.v1.executor.Call.Message') ->
@@ -246,7 +257,7 @@ dispatch_event('MESSAGE', Event, #executor_state{ handler_module = Module, handl
     State#executor_state{handler_state = HandlerState1};
 
 
-dispatch_event('SHUTDOWN', Event, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
+dispatch_event('SHUTDOWN', _, #executor_state{ handler_module = Module, handler_state = HandlerState } = State) ->
 
     {ok, HandlerState1} = Module:shutdown(self(), HandlerState),
     State#executor_state{handler_state = HandlerState1};
