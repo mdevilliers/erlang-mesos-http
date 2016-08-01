@@ -1,6 +1,6 @@
 -module (example_scheduler).
 
--export ([init/1, subscribed/2, inverse_offers/3, offers/3, rescind/3, update/3, 
+-export ([init/1, subscribed/2, inverse_offers/3, rescind_inverse_offers/3, offers/3, rescind/3, update/3, 
             message/5, failure/5, error/3]).
 
 -behaviour (scheduler).
@@ -36,6 +36,11 @@ subscribed(_Client, State) ->
 inverse_offers(_Client, _Offers,State) ->
 
     io:format("inverse offers callback : ~p~n", [State]),
+    {ok, State}.
+
+rescind_inverse_offers(_Client, _Offers,State) ->
+
+    io:format("rescind inverse offers callback : ~p~n", [State]),
     {ok, State}.
 
 offers(Client, Offers, #framework_state{ tasks_started = 1} = State) ->
