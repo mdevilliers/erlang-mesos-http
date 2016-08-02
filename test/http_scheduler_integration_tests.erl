@@ -16,7 +16,7 @@ http_scheduler_can_be_started_and_stopped_test() ->
         FrameworkInfo = #'mesos.v1.FrameworkInfo'{ user=CurrentUser,
                                                name="Erlang Test Framework"},
 
-        { FrameworkInfo, ?MASTER_LOCATION, true, true, [] }
+        { FrameworkInfo, ?MASTER_LOCATION, true, [] }
         end),
 
     meck:expect(test_framework, subscribed , fun(_Client, State) -> io:format(user,"SUBSCRIBED~n", []), {ok,State} end),
@@ -25,7 +25,7 @@ http_scheduler_can_be_started_and_stopped_test() ->
     {ok,Pid} = scheduler:start(test_framework, []),
 
     meck:wait(test_framework, subscribed, '_', 1000),
-    %meck:wait(test_framework, offers, '_', 1000),
+    meck:wait(test_framework, offers, '_', 1000),
 
     ok = scheduler:teardown(Pid),
 

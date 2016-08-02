@@ -24,9 +24,8 @@ init(_) ->
 
     MasterUrl = "http://localhost:5050",
     ImplicitAcknowledgements = true,
-    Force = true,
 
-    { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, Force, #framework_state{} }.
+    { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, #framework_state{} }.
 
 subscribed(_Client, State) ->
 
