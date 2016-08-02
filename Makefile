@@ -42,7 +42,7 @@ mesos-slave:
 	-v /cgroup:/cgroup \
 	-v /sys:/sys \
 	-v /usr/local/bin/docker:/usr/local/bin/docker \
-	mesosphere/mesos-slave:1.0.0
+	mesosphere/mesos-slave:1.0.0  --ip=127.0.0.1 --hostname=127.0.0.1
 
 generate-proto-bindings: clean-bindings ## generate the erlang bindings fromthe proto files
 	deps/gpb/bin/protoc-erl -I$(PWD)/proto -pkgs -o-erl src -o-hrl include -modsuffix _pb -il $(wildcard $(PWD)/proto/*.proto)
