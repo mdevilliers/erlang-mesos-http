@@ -26,7 +26,7 @@ mesos-master:
 	-e MESOS_WORK_DIR=/var/tmp/mesos \
 	-v "$(pwd)/log/mesos:/var/log/mesos" \
 	-v "$(pwd)/tmp/mesos:/var/tmp/mesos" \
-	mesosphere/mesos-master:1.0.0
+	mesosphere/mesos-master:1.0.0 --ip=127.0.0.1 --hostname=127.0.0.1
 
 mesos-slave:
 	docker run -d --net=host --name mesos_slave --privileged \
