@@ -54,7 +54,6 @@ clean-proto-bindings:
 
 clean-bindingsn-proto-includes:
 	rm -f include/*_pb.hrl
-	
 
 .PHONY: generate-proto-bindings test-environment test-environment-down mesos-master mesos-slave zookeeper
 
