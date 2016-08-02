@@ -443,7 +443,7 @@ handle_cast({request, Message}, #scheduler_state{master_url = MasterUrl, framewo
     }, StreamId),
     {noreply, State}.
 
-% TODO : Add support forSUPPRESS 
+% TODO : Add support for SUPPRESS
 
 handle_info({hackney_response, _Ref, {status, _StatusInt, _Reason}}, State) ->
     %io:format("got ~p status: ~p with reason ~p~n", [_Ref, _StatusInt, _Reason]),
@@ -555,18 +555,6 @@ acknowledgeStatusUpdate(true, #'mesos.v1.TaskStatus'{task_id = TaskId,
                                                      agent_id = AgentId,
                                                      uuid = Uuid}) ->
     scheduler:acknowledge(self(), AgentId, TaskId, Uuid).
-
-% only send out offers or inverse offers if they exist
-% chain one after the other if they are received together
-%offer_dispatch(_, [], [], State) -> {ok, State};
-%offer_dispatch(Module, Offers, [], State) ->
-%    Module:offers(self(), Offers, State);
-%offer_dispatch(Module, [], InverseOffers, State) ->
-%    Module:inverse_offers(self(), InverseOffers, State);
-%offer_dispatch(Module, Offers, InverseOffers, State) ->
-%    {ok, State1} = Module:offers(self(), Offers, State),
-%    {ok, State2} = Module:inverse_offers(self(), InverseOffers, State1),
-%    {ok, State2}.
 
 post(MasterUrl, Message, StreamId) ->
 
