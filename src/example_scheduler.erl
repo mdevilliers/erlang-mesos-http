@@ -74,7 +74,6 @@ offers(Client, [ #'mesos.v1.Offer'{ id = OfferId, agent_id = AgentId } | _] = Of
                     value = 32 }
                 },
 
-
     TaskInfo = #'mesos.v1.TaskInfo'{
         name = "erlang_task_" ++ Id,
         task_id = #'mesos.v1.TaskID'{ value = "task_id_" ++ Id},
