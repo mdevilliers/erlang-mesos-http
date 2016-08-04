@@ -11,3 +11,18 @@ How does it work
 ----------------
 
 TODO
+
+
+TODO
+----
+
+v1_0_0
+
+Scheduler :
+ - test and resolve master failover
+ - test for error conditions
+
+Executor :
+ - slave with erlang installed?
+ - make work
+
