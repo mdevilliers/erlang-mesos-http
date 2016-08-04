@@ -1,12 +1,18 @@
 .DEFAULT_GOAL := help
 
+build: ## builds erlang-mesos-http only
+	./rebar skip_deps=true compile
+
+build-all: bootstrap ## builds all of the source
+	./rebar compile
+
 test: ## run tests
 	./rebar skip_deps=true eunit
 
-bootstrap: ## set up environment
+bootstrap: ## bootstraps dependencies
 	./rebar get-deps
 
-.PHONY: test bootstrap
+.PHONY: build build-all test bootstrap
 
 test-environment: zookeeper mesos-master mesos-slave ## install integration environment
 
@@ -44,6 +50,8 @@ mesos-slave:
 	-v /usr/local/bin/docker:/usr/local/bin/docker \
 	mesosphere/mesos-slave:1.0.0  --ip=127.0.0.1 --hostname=127.0.0.1
 
+.PHONY: test-environment test-environment-down mesos-master mesos-slave zookeeper
+
 generate-proto-bindings: clean-bindings ## generate the erlang bindings fromthe proto files
 	deps/gpb/bin/protoc-erl -I$(PWD)/proto -pkgs -o-erl src -o-hrl include -modsuffix _pb -il $(wildcard $(PWD)/proto/*.proto)
 
@@ -55,7 +63,7 @@ clean-proto-bindings:
 clean-bindingsn-proto-includes:
 	rm -f include/*_pb.hrl
 
-.PHONY: generate-proto-bindings test-environment test-environment-down mesos-master mesos-slave zookeeper
+.PHONY: generate-proto-bindings clean-bindings clean-proto-bindings clean-proto-includes
 
 # 'help' parses the Makefile and displays the help text
 help:
