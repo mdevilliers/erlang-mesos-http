@@ -4,8 +4,13 @@
 
 -include_lib("scheduler_pb.hrl").
 
--export([start/2, start_link/2, teardown/1, accept/3, accept/4,
-         decline/2, decline/3, revive/1, kill/2, kill/3, shutdown/3,
+-export([start/2, start_link/2, teardown/1, 
+         accept/3, accept/4,
+         accept_inverse_offers/2, accept_inverse_offers/3,
+         decline_inverse_offers/2, decline_inverse_offers/3,
+         decline/2, decline/3, revive/1, 
+         kill/2, kill/3, kill/4, 
+         shutdown/3,
          acknowledge/4, reconcile/2, message/4, request/2]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -27,13 +32,16 @@
 % callback specifications
 -type scheduler_client() :: pid().
 -type offers() :: ['mesos.v1.Offer'].
+-type offer_ids() :: ['mesos.v1.OfferID'].
+-type inverse_offers() :: ['mesos.v1.InverseOffer'].
+-type inverse_offer_ids() :: ['mesos.v1.OfferID'].
 -type operations() ::  ['mesos.v1.Offer.Operation'].
 -type reconcile_tasks() ::  ['mesos.v1.scheduler.Call.Reconcile.Task'].
 -type requests() ::  ['mesos.v1.Request'].
 
 -callback init( Args :: any())
     -> {FrameworkInfo :: #'mesos.v1.FrameworkInfo'{}, MasterUrl :: string(),
-        ImplicitAcknowledgements :: boolean(), Force :: boolean(), State :: any()}.
+        ImplicitAcknowledgements :: boolean(), State :: any()}.
 
 -callback subscribed( Client :: scheduler_client(), State :: any())
     -> {ok, State :: any()}.
@@ -42,6 +50,8 @@
 -callback inverse_offers(Client :: scheduler_client(), Offers :: offers(), State :: any())
     -> {ok, State :: any()}.
 -callback rescind( Client :: scheduler_client(), OfferId :: #'mesos.v1.OfferID'{}, State :: any())
+    -> {ok, State :: any()}.
+-callback rescind_inverse_offers( Client :: scheduler_client(), InverseOffers :: inverse_offers(), State :: any())
     -> {ok, State :: any()}.
 -callback update( Client :: scheduler_client(), TaskStatus :: #'mesos.v1.TaskStatus'{}, State :: any())
     -> {ok, State :: any()}.
@@ -73,7 +83,7 @@ teardown(Scheduler) when is_pid(Scheduler) ->
     gen_server:cast(Scheduler, {teardown}).
 
 -spec accept(Scheduler :: scheduler_client(),
-             OfferIds :: offers(),
+             OfferIds :: offer_ids(),
              Operations :: operations()) -> ok.
 
 accept(Scheduler, OfferIds, Operations) when is_pid(Scheduler) ->
@@ -84,7 +94,7 @@ accept(Scheduler, OfferIds, Operations) when is_pid(Scheduler) ->
     }}).
 
 -spec accept(Scheduler :: scheduler_client(),
-             OfferIds :: offers(),
+             OfferIds :: offer_ids(),
              Operations :: operations(),
              Filters :: #'mesos.v1.Filters'{}) -> ok.
 
@@ -96,6 +106,49 @@ accept(Scheduler, OfferIds, Operations, Filters) when is_pid(Scheduler),
         operations = Operations,
         filters = Filters
     }}).
+
+-spec accept_inverse_offers(Scheduler :: scheduler_client(),
+                           InverseOfferIds :: inverse_offer_ids()) -> ok.
+
+accept_inverse_offers(Scheduler, InverseOfferIds) when is_pid(Scheduler) ->
+
+    gen_server:cast(Scheduler, {accept_inverse_offers, #'mesos.v1.scheduler.Call.AcceptInverseOffers'{
+        inverse_offer_ids = InverseOfferIds
+    }}).
+
+-spec accept_inverse_offers(Scheduler :: scheduler_client(),
+                           InverseOfferIds :: inverse_offer_ids(),
+                           Filters :: #'mesos.v1.Filters'{}) -> ok.
+
+accept_inverse_offers(Scheduler, InverseOfferIds, Filters) when is_pid(Scheduler),
+                                                            is_record(InverseOfferIds, 'mesos.v1.Filters') ->
+    gen_server:cast(Scheduler, {accept_inverse_offers, #'mesos.v1.scheduler.Call.AcceptInverseOffers'{
+        inverse_offer_ids = InverseOfferIds,
+        filters = Filters
+     }}).
+
+-spec decline_inverse_offers(Scheduler :: scheduler_client(),
+                           InverseOfferIds :: inverse_offer_ids()) -> ok.
+
+decline_inverse_offers(Scheduler, InverseOfferIds) when is_pid(Scheduler) ->
+
+    gen_server:cast(Scheduler, {decline_inverse_offers, #'mesos.v1.scheduler.Call.DeclineInverseOffers'{
+        inverse_offer_ids = InverseOfferIds
+    }}).
+
+
+-spec decline_inverse_offers(Scheduler :: scheduler_client(),
+                           InverseOfferIds :: inverse_offer_ids(),
+                           Filters :: #'mesos.v1.Filters'{}) -> ok.
+
+decline_inverse_offers(Scheduler, InverseOfferIds, Filters) when is_pid(Scheduler),
+                                                                 is_record(InverseOfferIds, 'mesos.v1.Filters') ->
+
+    gen_server:cast(Scheduler, {decline_inverse_offers, #'mesos.v1.scheduler.Call.DeclineInverseOffers'{
+        inverse_offer_ids = InverseOfferIds,
+        filters = Filters
+    }}).
+
 
 -spec decline(Scheduler :: scheduler_client(),
              OfferIds :: offers()) -> ok.
@@ -134,7 +187,10 @@ kill(Scheduler, TaskId) when is_pid(Scheduler), is_record(TaskId, 'mesos.v1.Task
 
 -spec kill (Scheduler :: scheduler_client(),
             TaskId :: #'mesos.v1.TaskID'{},
-            AgentId :: #'mesos.v1.AgentID'{} ) -> ok.
+            AgentId :: #'mesos.v1.AgentID'{} ) -> ok
+        ;  (Scheduler :: scheduler_client(),
+            TaskId :: #'mesos.v1.TaskID'{},
+            KillPolicy :: #'mesos.v1.KillPolicy'{}) -> ok.
 
 kill(Scheduler, TaskId, AgentId) when is_pid(Scheduler),
                                       is_record(TaskId, 'mesos.v1.TaskID'),
@@ -143,6 +199,31 @@ kill(Scheduler, TaskId, AgentId) when is_pid(Scheduler),
     gen_server:cast(Scheduler, {kill, #'mesos.v1.scheduler.Call.Kill'{
             task_id = TaskId,
             agent_id = AgentId
+        }});
+
+kill(Scheduler, TaskId, KillPolicy) when is_pid(Scheduler), 
+                                         is_record(TaskId, 'mesos.v1.TaskID'),
+                                         is_record(KillPolicy, 'mesos.v1.KillPolicy')->
+
+    gen_server:cast(Scheduler, {kill, #'mesos.v1.scheduler.Call.Kill'{
+            task_id = TaskId,
+            kill_policy = KillPolicy
+    }}).
+
+-spec kill (Scheduler :: scheduler_client(),
+            TaskId :: #'mesos.v1.TaskID'{},
+            AgentId :: #'mesos.v1.AgentID'{},
+            KillPolicy :: #'mesos.v1.KillPolicy'{}) -> ok.
+
+kill(Scheduler, TaskId, AgentId, KillPolicy) when is_pid(Scheduler),
+                                      is_record(TaskId, 'mesos.v1.TaskID'),
+                                      is_record(AgentId, 'mesos.v1.AgentID'),
+                                      is_record(KillPolicy, 'mesos.v1.KillPolicy')->
+
+    gen_server:cast(Scheduler, {kill, #'mesos.v1.scheduler.Call.Kill'{
+            task_id = TaskId,
+            agent_id = AgentId,
+            kill_policy = KillPolicy
         }}).
 
 -spec shutdown(Scheduler :: scheduler_client(),
@@ -200,8 +281,7 @@ message(Scheduler, AgentId, ExecutorId, Data) when is_pid(Scheduler),
 -spec request(Scheduler :: scheduler_client(),
                Requests :: requests()) -> ok.
 
-request(Scheduler, Requests) when is_pid(Scheduler) -> 
-    
+request(Scheduler, Requests) when is_pid(Scheduler) ->
     gen_server:cast(Scheduler, {request, #'mesos.v1.scheduler.Call.Request'{
         requests = Requests
     }}).
@@ -217,13 +297,12 @@ handle_call(_, _, State) ->
 handle_cast({startup, Module, Args}, _)->
 
     case Module:init(Args) of
-        { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, Force, State }
+        { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, State }
                 when is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo'),
                      is_list(MasterUrl),
-                     is_boolean(ImplicitAcknowledgements),
-                     is_boolean(Force) ->
+                     is_boolean(ImplicitAcknowledgements)->
 
-            {ok, Request} = subscribe(MasterUrl, FrameworkInfo, Force),
+            {ok, Request} = subscribe(MasterUrl, FrameworkInfo),
             State1 = #scheduler_state{
                                 master_url = MasterUrl,
                                 implicit_ackowledgments = ImplicitAcknowledgements,
@@ -264,6 +343,16 @@ handle_cast({accept, Message}, #scheduler_state{ master_url = MasterUrl,
     },StreamId),
     {noreply, State};
 
+handle_cast({accept_inverse_offers, Message}, #scheduler_state{master_url = MasterUrl, framework_id = FrameworkId, stream_id = StreamId} = State) ->
+
+    ok = post(MasterUrl,#'mesos.v1.scheduler.Call'{
+        framework_id = FrameworkId,
+        type = 'ACCEPT_INVERSE_OFFERS',
+        accept_inverse_offers = Message
+    },StreamId),
+    {noreply, State};
+
+
 handle_cast({decline, Message}, #scheduler_state{ master_url = MasterUrl,
                                                   framework_id = FrameworkId, stream_id = StreamId} = State)
 
@@ -273,6 +362,15 @@ handle_cast({decline, Message}, #scheduler_state{ master_url = MasterUrl,
         framework_id = FrameworkId,
         decline = Message,
         type = 'DECLINE'
+    },StreamId),
+    {noreply, State};
+
+handle_cast({decline_inverse_offersi, Message}, #scheduler_state{master_url = MasterUrl, framework_id = FrameworkId, stream_id = StreamId} = State) ->
+
+    ok = post(MasterUrl,#'mesos.v1.scheduler.Call'{
+        framework_id = FrameworkId,
+        type = 'DECLINE_INVERSE_OFFERS',
+        decline_inverse_offers = Message
     },StreamId),
     {noreply, State};
 
@@ -345,6 +443,8 @@ handle_cast({request, Message}, #scheduler_state{master_url = MasterUrl, framewo
     }, StreamId),
     {noreply, State}.
 
+% TODO : Add support for SUPPRESS
+
 handle_info({hackney_response, _Ref, {status, _StatusInt, _Reason}}, State) ->
     %io:format("got ~p status: ~p with reason ~p~n", [_Ref, _StatusInt, _Reason]),
     {noreply,State};
@@ -384,9 +484,16 @@ dispatch_event('SUBSCRIBED', Event, #scheduler_state{ framework_id = undefined, 
 
 dispatch_event('OFFERS', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
 
-    #'mesos.v1.scheduler.Event.Offers'{ offers = Offers, inverse_offers = InverseOffers} = Event#'mesos.v1.scheduler.Event'.offers,
+    #'mesos.v1.scheduler.Event.Offers'{ offers = Offers } = Event#'mesos.v1.scheduler.Event'.offers,
 
-    {ok, HandlerState1} = offer_dispatch(Module, Offers, InverseOffers, HandlerState),
+    {ok, HandlerState1} = Module:offers(self(), Offers, HandlerState),
+    State#scheduler_state{handler_state = HandlerState1};
+
+dispatch_event('INVERSE_OFFERS', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
+
+    #'mesos.v1.scheduler.Event.InverseOffers'{ inverse_offers = Offers } = Event#'mesos.v1.scheduler.Event'.inverse_offers,
+
+    {ok, HandlerState1} = Module:inverse_offers(self(), Offers, HandlerState),
     State#scheduler_state{handler_state = HandlerState1};
 
 dispatch_event('RESCIND', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
@@ -395,6 +502,14 @@ dispatch_event('RESCIND', Event, #scheduler_state{ handler_module = Module, hand
 
     {ok, HandlerState1} = Module:rescind(self(), OfferId, HandlerState),
     State#scheduler_state{handler_state = HandlerState1};
+
+dispatch_event('RESCIND_INVERSE_OFFER', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState } = State) ->
+
+    #'mesos.v1.scheduler.Event.RescindInverseOffer'{ inverse_offer_id = OfferId } = Event#'mesos.v1.scheduler.Event'.rescind_inverse_offer,
+
+    {ok, HandlerState1} = Module:rescind_inverse_offer(self(), OfferId, HandlerState),
+    State#scheduler_state{handler_state = HandlerState1};
+
 
 dispatch_event('UPDATE', Event, #scheduler_state{ handler_module = Module, handler_state = HandlerState, implicit_ackowledgments = ImplicitAcknowledgements } = State) ->
 
@@ -426,8 +541,9 @@ dispatch_event('ERROR', Event, #scheduler_state{ handler_module = Module, handle
     State#scheduler_state{handler_state = HandlerState1};
 
 % TODO : implement reconnect logic with backoff based on this
-dispatch_event('HEARTBEAT', Event, State) ->
-    io:format("HEARTBEAT : ~p~n", [Event]), State.
+dispatch_event('HEARTBEAT', _, State) ->
+    %io:format("HEARTBEAT : ~p~n", [Event]),
+    State.
 
 to_events([]) -> [];
 to_events([H|T]) ->
@@ -440,18 +556,6 @@ acknowledgeStatusUpdate(true, #'mesos.v1.TaskStatus'{task_id = TaskId,
                                                      agent_id = AgentId,
                                                      uuid = Uuid}) ->
     scheduler:acknowledge(self(), AgentId, TaskId, Uuid).
-
-% only send out offers or inverse offers if they exist
-% chain one after the other if they are received together
-offer_dispatch(_, [], [], State) -> {ok, State};
-offer_dispatch(Module, Offers, [], State) ->
-    Module:offers(self(), Offers, State);
-offer_dispatch(Module, [], InverseOffers, State) ->
-    Module:inverse_offers(self(), InverseOffers, State);
-offer_dispatch(Module, Offers, InverseOffers, State) ->
-    {ok, State1} = Module:offers(self(), Offers, State),
-    {ok, State2} = Module:inverse_offers(self(), InverseOffers, State1),
-    {ok, State2}.
 
 post(MasterUrl, Message, StreamId) ->
 
@@ -470,12 +574,11 @@ post(MasterUrl, Message, StreamId) ->
             ok
     end.
 
-subscribe(MasterUrl, FrameworkInfo, Force) when is_list(MasterUrl),
-                            is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo'),
-                            is_boolean(Force) ->
+subscribe(MasterUrl, FrameworkInfo) when is_list(MasterUrl),
+                            is_record(FrameworkInfo, 'mesos.v1.FrameworkInfo') ->
 
     Message = #'mesos.v1.scheduler.Call.Subscribe'{
-        framework_info = FrameworkInfo, force = Force
+        framework_info = FrameworkInfo
     },
 
     Call = #'mesos.v1.scheduler.Call'{

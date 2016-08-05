@@ -8,16 +8,17 @@ services:
     - docker
 
 before_install:
+    - sudo apt-get -o Dpkg::Options::="--force-confnew" install -y --force-yes docker-engine=1.11.2-0~trusty
     - make test-environment
     - docker ps
     - docker logs zookeeper
-    - docker logs mesos-master
-    - docker logs mesos-slave
+    - docker logs mesos_master
+    - docker logs mesos_slave
 
 after_script:
     - docker ps
     - docker logs zookeeper
-    - docker logs mesos-master
-    - docker logs mesos-slave
+    - docker logs mesos_master
+    - docker logs mesos_slave
 
 

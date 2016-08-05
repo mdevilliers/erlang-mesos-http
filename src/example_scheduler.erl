@@ -1,6 +1,6 @@
 -module (example_scheduler).
 
--export ([init/1, subscribed/2, inverse_offers/3, offers/3, rescind/3, update/3, 
+-export ([init/1, subscribed/2, inverse_offers/3, rescind_inverse_offers/3, offers/3, rescind/3, update/3, 
             message/5, failure/5, error/3]).
 
 -behaviour (scheduler).
@@ -24,9 +24,8 @@ init(_) ->
 
     MasterUrl = "http://localhost:5050",
     ImplicitAcknowledgements = true,
-    Force = true,
 
-    { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, Force, #framework_state{} }.
+    { FrameworkInfo, MasterUrl, ImplicitAcknowledgements, #framework_state{} }.
 
 subscribed(_Client, State) ->
 
@@ -36,6 +35,11 @@ subscribed(_Client, State) ->
 inverse_offers(_Client, _Offers,State) ->
 
     io:format("inverse offers callback : ~p~n", [State]),
+    {ok, State}.
+
+rescind_inverse_offers(_Client, _Offers,State) ->
+
+    io:format("rescind inverse offers callback : ~p~n", [State]),
     {ok, State}.
 
 offers(Client, Offers, #framework_state{ tasks_started = 1} = State) ->
@@ -55,7 +59,7 @@ offers(Client, [ #'mesos.v1.Offer'{ id = OfferId, agent_id = AgentId } | _] = Of
 
     Id = get_unique_identifier(),
 
-    Command = "env && sleep 10 && echo 'byebye'",
+    Command = "env && sleep 10 && echo 'byebye' && exit 0",
 
     Cpu = #'mesos.v1.Resource'{
             name="cpus",
@@ -70,20 +74,13 @@ offers(Client, [ #'mesos.v1.Offer'{ id = OfferId, agent_id = AgentId } | _] = Of
                     value = 32 }
                 },
 
-
     TaskInfo = #'mesos.v1.TaskInfo'{
         name = "erlang_task_" ++ Id,
         task_id = #'mesos.v1.TaskID'{ value = "task_id_" ++ Id},
         agent_id = AgentId,
-        resources = [Cpu],
-        executor = #'mesos.v1.ExecutorInfo'{
-                    executor_id= #'mesos.v1.ExecutorID'{
-                        value = "executor_id_" ++ Id
-                        },
-                    command = #'mesos.v1.CommandInfo'{
-                        value = Command
-                        },
-                     resources = [Cpu, Memory]
+        resources = [Cpu, Memory],
+        command = #'mesos.v1.CommandInfo'{
+                      value = Command
                     }
     },
 
@@ -107,9 +104,9 @@ rescind(_Client, OfferId, State) ->
     io:format("rescind callback : OfferId : ~p ~n", [OfferId]),
     {ok, State}.
 
-update(_Client, #'mesos.v1.TaskStatus'{ state = 'TASK_FAILED'} = TaskStatus, State) ->
-
-    io:format("update callback : TASKLOST : TaskStatus: ~p ~n", [TaskStatus]),
+update(_Client, #'mesos.v1.TaskStatus'{ state = 'TASK_FINISHED'} = TaskStatus, State) ->
+  %                  }
+    io:format("update callback : ~p ~n", [TaskStatus]),
     State1 = State#framework_state{tasks_started = 0},
     {ok, State1};
 update(_Client, TaskStatus, State) ->
