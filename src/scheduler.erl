@@ -541,7 +541,7 @@ dispatch_event('ERROR', Event, #scheduler_state{ handler_module = Module, handle
     State#scheduler_state{handler_state = HandlerState1};
 
 % TODO : implement reconnect logic with backoff based on this
-dispatch_event('HEARTBEAT', Event, State) ->
+dispatch_event('HEARTBEAT', _, State) ->
     %io:format("HEARTBEAT : ~p~n", [Event]),
     State.
 
